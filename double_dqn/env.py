@@ -38,6 +38,9 @@ class WrappedEnv(dm_env.Environment):
     def close(self):
         self._gym_env.close()
 
+    def render(self):
+        self._gym_env.render()
+
     @property
     def observation_spec(self):
         return self._gym_env.observation_space
@@ -45,6 +48,10 @@ class WrappedEnv(dm_env.Environment):
     @property
     def action_spec(self):
         return self._gym_env.action_space
+
+    @property
+    def lives(self):
+        return self._gym_env.ale.lives()
 
     def _apply_random_noops(self, initial_timestep) -> dm_env.TimeStep:
         assert initial_timestep.first()
