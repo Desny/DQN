@@ -7,6 +7,7 @@ from double_dqn.replay import ReplayMemory
 import double_dqn.preprocessor as preprocessor
 import dm_env
 from collections import namedtuple
+import time
 
 StepType = dm_env.StepType
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -15,15 +16,14 @@ Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward', 'discount'))
 
 
-
 def get_args():
     parser = argparse.ArgumentParser(description='hyperparameters')
     parser.add_argument('--batch_size', default=32, type=int)
     parser.add_argument('--gamma', default=0.99, type=float)
     parser.add_argument('--eps_start', default=1.0, type=float)
     parser.add_argument('--eps_end', default=0.1, type=float)
-    parser.add_argument('--target_update_period', default=40000, type=int)
-    parser.add_argument('--num_episodes', default=200, type=int)
+    parser.add_argument('--target_update_period', default=6400, type=int)
+    parser.add_argument('--num_episodes', default=100000, type=int)
     parser.add_argument('--num_train_frames', default=1000000, type=int)
     parser.add_argument('--exploration_epsilon_decay_frame_fraction', default=0.02, type=float)
     parser.add_argument('--max_noop_steps', default=30, type=int)
@@ -31,7 +31,7 @@ def get_args():
     parser.add_argument('--seed', default=1, type=int)
     parser.add_argument('--environment_height', default=84, type=int)
     parser.add_argument('--environment_width', default=84, type=int)
-    parser.add_argument('--capacity', default=1000000, type=int, help='capacity of replay memory')
+    parser.add_argument('--capacity', default=50000, type=int, help='capacity of replay memory')
     parser.add_argument('--additional_discount', default=0.99, type=float, help='scale discount value in preprocess')
     parser.add_argument('--max_abs_reward', default=1., type=float)
     parser.add_argument('--resize_height', default=84, type=int, help='resize shape in preprocess')
@@ -39,7 +39,7 @@ def get_args():
     parser.add_argument('--num_action_repeats', default=4, type=int)
     parser.add_argument('--num_stacked_frames', default=4, type=int)
     parser.add_argument('--learn_period', default=16, type=int, help='time interval for updating an agent')
-    parser.add_argument('--mode', default='train', type=str)
+    parser.add_argument('--mode', default='eval', type=str)
     args = parser.parse_args()
     return args
 
@@ -50,7 +50,8 @@ if __name__ == '__main__':
     env = WrappedEnv('SpaceInvaders-v0', cfg.max_noop_steps, cfg.min_noop_steps)
     n_actions = env.action_spec.n
     memory = ReplayMemory(cfg.capacity)
-    agent = DoubleDqnAgent(cfg, n_actions, memory)
+    net_file = 'double_dqn/weights/policy_net_weights_896.pth'
+    agent = DoubleDqnAgent(cfg, n_actions, memory, net_file)
 
     def preprocessor_builder():
         return preprocessor.preprocess(
@@ -97,9 +98,7 @@ if __name__ == '__main__':
                 if timestep_group.last():
                     break
 
-            print('episode:', episode)
-            if episode % 10000 == 0:
-                torch.save(agent.policy_net.state_dict(), 'weights/policy_net_weights_{0}.pth'.format(episode/10000))
+            print('episode:{0} memory_size:{1} frame_t:{2}'.format(episode, memory.size, agent.frame_t))
     else:
         timestep = env.reset()
         a_t = None
@@ -112,5 +111,6 @@ if __name__ == '__main__':
             a_t = action = agent.predict_action(timestep_group.observation)
             timestep = env.step(action)
             env.render()
+            time.sleep(0.05)
             if timestep_group.last():
                 break

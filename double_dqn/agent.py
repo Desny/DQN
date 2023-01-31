@@ -26,11 +26,11 @@ class DoubleDqnAgent:
         self.eps_decay = cfg.exploration_epsilon_decay_frame_fraction * cfg.num_train_frames * cfg.num_episodes
         self.frame_t = -1
         self.action = 0
-
-        self.target_net.load_state_dict(self.policy_net.state_dict())
+        self.num_net_file = 0
 
         if net_file:
             self.policy_net.load_state_dict(torch.load(net_file, map_location=torch.device('cpu')))
+        self.target_net.load_state_dict(self.policy_net.state_dict())
 
     def select_action(self, timestep: dm_env.TimeStep) -> int:
         self.frame_t += 1
@@ -61,11 +61,11 @@ class DoubleDqnAgent:
         transitions = self.memory.sample(self.batch_size)
         batch = Transition(*zip(*transitions))
 
-        state_batch = torch.stack(tuple(map(lambda s: torch.from_numpy(s), batch.state)))
-        action_batch = torch.tensor(batch.action).view(self.batch_size, 1)
-        next_state_batch = torch.stack(tuple(map(lambda s: torch.from_numpy(s), batch.next_state)))
-        reward_batch = torch.tensor(batch.reward, dtype=torch.float32).view(self.batch_size, 1)
-        discount_batch = torch.tensor(batch.discount, dtype=torch.float32).view(self.batch_size, 1)
+        state_batch = torch.stack(tuple(map(lambda s: torch.from_numpy(s), batch.state))).to(device)
+        action_batch = torch.tensor(batch.action).view(self.batch_size, 1).to(device)
+        next_state_batch = torch.stack(tuple(map(lambda s: torch.from_numpy(s), batch.next_state))).to(device)
+        reward_batch = torch.tensor(batch.reward, dtype=torch.float32).view(self.batch_size, 1).to(device)
+        discount_batch = torch.tensor(batch.discount, dtype=torch.float32).view(self.batch_size, 1).to(device)
         state_action_values = self.policy_net(state_batch).gather(1, action_batch)
         with torch.no_grad():
             argmax_action = self.policy_net(next_state_batch).max(1)[1].view(self.batch_size, 1)
@@ -80,4 +80,6 @@ class DoubleDqnAgent:
         optimizer.step()
 
         if self.frame_t % self.target_update_period == 0:
+            self.num_net_file += 1
             self.target_net.load_state_dict(self.policy_net.state_dict())
+            torch.save(self.policy_net.state_dict(), 'double_dqn/weights/policy_net_weights_{0}.pth'.format(self.num_net_file))
