@@ -1,10 +1,9 @@
-from double_dqn.network import DQN
-import math
+from prioritized.network import DQN
 import random
 from collections import namedtuple
 import torch
-import torch.nn as nn
 import dm_env
+import os
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -13,7 +12,14 @@ Transition = namedtuple('Transition',
 
 
 class DoubleDqnAgent:
-    def __init__(self, cfg, n_actions, memory, net_file=None):
+    def __init__(
+        self,
+        cfg,
+        n_actions,
+        memory,
+        exploration_epsilon,
+        net_file=None
+    ):
         self.n_actions = n_actions
         self.policy_net = DQN(n_actions).to(device)
         self.target_net = DQN(n_actions).to(device)
@@ -21,14 +27,14 @@ class DoubleDqnAgent:
         self.batch_size = cfg.batch_size
         self.gamma = cfg.gamma
         self.target_update_period = cfg.target_update_period
-        self.eps_end = cfg.eps_end
-        self.eps_start = cfg.eps_start
-        self.eps_decay = cfg.exploration_epsilon_decay_frame_fraction * cfg.num_train_frames * cfg.num_episodes
+        self.exploration_epsilon = exploration_epsilon
         self.frame_t = -1
         self.action = 0
         self.num_net_file = 0
+        self.max_seen_priority = 1.
 
-        if net_file:
+        if net_file and os.path.exists(net_file):
+            print('load net_file:', net_file)
             self.policy_net.load_state_dict(torch.load(net_file, map_location=torch.device('cpu')))
         self.target_net.load_state_dict(self.policy_net.state_dict())
 
@@ -38,8 +44,7 @@ class DoubleDqnAgent:
             action = self.action
         else:
             sample = random.random()
-            eps_threshold = self.eps_end + (self.eps_start - self.eps_end) * math.exp(
-                -1. * self.frame_t / self.eps_decay)
+            eps_threshold = self.exploration_epsilon(self.frame_t)
             if sample > eps_threshold:
                 state = timestep.observation
                 action = self.action = self.predict_action(state)
@@ -56,9 +61,8 @@ class DoubleDqnAgent:
     def update(self):
         if self.memory.size < self.batch_size:
             return
-        loss_fn = nn.MSELoss()
         optimizer = torch.optim.SGD(self.policy_net.parameters(), lr=0.00025)
-        transitions = self.memory.sample(self.batch_size)
+        transitions, indices, weights = self.memory.sample(self.batch_size)
         batch = Transition(*zip(*transitions))
 
         state_batch = torch.stack(tuple(map(lambda s: torch.from_numpy(s), batch.state))).to(device)
@@ -72,14 +76,21 @@ class DoubleDqnAgent:
             q_max = self.target_net(next_state_batch).gather(1, argmax_action)
             expected_state_action_values = reward_batch + self.gamma * q_max * discount_batch
 
-        loss = loss_fn(state_action_values, expected_state_action_values)
+        td_errors = state_action_values - expected_state_action_values
+        td_errors_square = torch.square(td_errors)
+        loss = torch.mean(td_errors_square * weights)
         optimizer.zero_grad()
         loss.backward()
         for param in self.policy_net.parameters():
             param.grad.data.clamp_(-1, 1)
         optimizer.step()
 
+        priorities = torch.abs(td_errors)
+        max_priority = priorities.max()
+        self.max_seen_priority = torch.max(torch.tensor(max_priority, self.max_seen_priority)).item()
+        self.memory.update_priorities(indices, priorities)
+
         if self.frame_t % self.target_update_period == 0:
             self.num_net_file += 1
             self.target_net.load_state_dict(self.policy_net.state_dict())
-            torch.save(self.policy_net.state_dict(), 'double_dqn/weights/policy_net_weights_{0}.pth'.format(self.num_net_file))
+            torch.save(self.policy_net.state_dict(), 'prioritized/weights/policy_net_weights_{0}.pth'.format(self.num_net_file))
