@@ -50,7 +50,7 @@ if __name__ == '__main__':
     env = WrappedEnv('SpaceInvaders-v0', cfg.max_noop_steps, cfg.min_noop_steps)
     n_actions = env.action_spec.n
     memory = ReplayMemory(cfg.capacity)
-    net_file = 'double_dqn/weights/policy_net_weights_3838.pth'
+    net_file = 'double_dqn/weights/policy_net_weights_1214.pth'
     agent = DoubleDqnAgent(cfg, n_actions, memory, net_file)
 
     def preprocessor_builder():

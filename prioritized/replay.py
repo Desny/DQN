@@ -139,6 +139,10 @@ class PrioritizedDistribution:
         uniform_indices = random.sample(self._active_indices, size)
         targets = np.random.uniform(size=size) * self._sum_tree.root()
         prioritized_indices = np.asarray(self._sum_tree.query(targets))
+        # test
+        # t = [self._sum_tree._storage[i+self._sum_tree._first_leaf] for i in prioritized_indices]
+        # t1 = self._sum_tree._storage[65536:65536+50000]
+
         usp = self._uniform_sample_probability
         # Desny: if transition's probability is smaller than usp, then choose uniform sampling
         # to ensure transitions with low priority can be sampled
@@ -165,25 +169,27 @@ class SumTree:
         # index 1 corresponding to the root node. The next n elements are leaf nodes
         # that contain values. A non-leaf node with index i has children at
         # locations 2 * i, 2 * i + 1.
-        self._capacity = 0
-        # size => leaf num
-        self._size = size
-        # first leaf index
-        self._first_leaf = 0
-        self._storage = np.zeros(0, dtype=np.float64)
-
         assert size >= 0
         new_capacity = 1
         while new_capacity < size:
             new_capacity *= 2
         new_storage = np.empty((2 * new_capacity,), dtype=np.float64)
         self._storage = new_storage
+        # first leaf index
         self._first_leaf = new_capacity
+        # size => leaf num
         self._size = size
 
     def root(self) -> float:
         """Returns sum of values."""
-        return self._storage[1] if self.size > 0 else np.nan
+        return self._storage[1] if self._size > 0 else np.nan
+
+    def get(self, indices) -> np.ndarray:
+        """Gets values corresponding to given indices."""
+        indices = np.asarray(indices)
+        if not ((0 <= indices) & (indices < self._size)).all():
+            raise IndexError('index out of range, expect 0 <= index < %s' % self._size)
+        return np.asarray([self._storage[i] for i in indices + self._first_leaf])
 
     def set(self, indices, values):
         """Sets values at the given indices."""
@@ -233,7 +239,7 @@ class SumTree:
                 idx = right_idx
                 target -= left_sum
 
-        assert idx < 2 * self.capacity
+        assert idx < 2 * self._first_leaf
         return idx - self._first_leaf
 
 

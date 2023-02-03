@@ -31,7 +31,7 @@ class DoubleDqnAgent:
         self.frame_t = -1
         self.action = 0
         self.num_net_file = 0
-        self.max_seen_priority = 1.
+        self.max_seen_priority = 0.001
 
         if net_file and os.path.exists(net_file):
             print('load net_file:', net_file)
@@ -78,6 +78,7 @@ class DoubleDqnAgent:
 
         td_errors = state_action_values - expected_state_action_values
         td_errors_square = torch.square(td_errors)
+        weights = torch.from_numpy(weights).to(device)
         loss = torch.mean(td_errors_square * weights)
         optimizer.zero_grad()
         loss.backward()
@@ -85,10 +86,11 @@ class DoubleDqnAgent:
             param.grad.data.clamp_(-1, 1)
         optimizer.step()
 
-        priorities = torch.abs(td_errors)
-        max_priority = priorities.max()
-        self.max_seen_priority = torch.max(torch.tensor(max_priority, self.max_seen_priority)).item()
-        self.memory.update_priorities(indices, priorities)
+        with torch.no_grad():
+            priorities = torch.abs(td_errors)
+            max_priority = priorities.max()
+            self.max_seen_priority = torch.max(torch.tensor([max_priority, self.max_seen_priority])).item()
+            self.memory.update_priorities(indices, priorities.cpu())
 
         if self.frame_t % self.target_update_period == 0:
             self.num_net_file += 1
