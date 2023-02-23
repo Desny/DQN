@@ -22,7 +22,7 @@ It refers to the code named dqn_zoo implemented by DeepMind in Jax. Double_dqn i
 
 #### To be noticed:
  - The working directory needs to be configured of *DQN*. It is recommended to run code on PyCharm that the configuration for running codes would be easier, referring to the picture below.
-![pycharm_run_config.png](https://github.com/Desny/DQN/pics/pycharm_run_config.png)
+![image](https://github.com/Desny/DQN/pics/pycharm_run_config.png)
 
  - If *net_file*(.pth) can not be found, the training process will start at the begining rather than breakpoints.
 
