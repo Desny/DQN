@@ -77,9 +77,9 @@ class DoubleDqnAgent:
             expected_state_action_values = reward_batch + self.gamma * q_max * discount_batch
 
         td_errors = state_action_values - expected_state_action_values
-        td_errors_square = torch.square(td_errors)
         weights = torch.from_numpy(weights).to(device)
-        loss = torch.mean(td_errors_square * weights)
+        td_errors_square = torch.square(weights * td_errors)
+        loss = torch.mean(td_errors_square)
         optimizer.zero_grad()
         loss.backward()
         for param in self.policy_net.parameters():

@@ -118,6 +118,7 @@ class PrioritizedDistribution:
         self._sum_tree = SumTree(capacity)
         self._active_indices = []
         self._active_indices_mask = np.zeros(capacity, dtype=np.bool)
+        self._capacity = capacity
 
     def set_priorities(self, indices, priorities):
         """Sets priorities for indices, whether or not all indices already exist."""
@@ -139,17 +140,15 @@ class PrioritizedDistribution:
         uniform_indices = random.sample(self._active_indices, size)
         targets = np.random.uniform(size=size) * self._sum_tree.root()
         prioritized_indices = np.asarray(self._sum_tree.query(targets))
-        # test
-        # t = [self._sum_tree._storage[i+self._sum_tree._first_leaf] for i in prioritized_indices]
-        # t1 = self._sum_tree._storage[65536:65536+50000]
 
         usp = self._uniform_sample_probability
-        # Desny: if transition's probability is smaller than usp, then choose uniform sampling
-        # to ensure transitions with low priority can be sampled
+        # Desny: to ensure transitions with low priority can be sampled
         indices = np.where(np.random.uniform(size=size) < usp, uniform_indices, prioritized_indices)
+        uniform_prob = np.asarray(1. / self._capacity)
         priorities = self._sum_tree.get(indices)
         prioritized_probs = priorities / self._sum_tree.root()
-        return indices, prioritized_probs
+        sample_probs = (1. - usp) * prioritized_probs + usp * uniform_prob
+        return indices, sample_probs
 
 
 class SumTree:
