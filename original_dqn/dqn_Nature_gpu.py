@@ -104,7 +104,7 @@ GAMMA = 0.99
 EPS_START = 1.0
 EPS_END = 0.1
 EPS_DECAY = 10000
-TARGET_UPDATE = 10
+TARGET_UPDATE = 100
 
 
 init_screen = get_screen()
@@ -193,16 +193,8 @@ def random_start(skip_steps=30, m=4):
     env.reset()
     state_queue = deque([], maxlen=m)
     next_state_queue = deque([], maxlen=m)
-    done = False
-    for i in range(skip_steps):
-        if (i+1) <= m:
-            state_queue.append(get_screen())
-        elif m < (i + 1) <= 2*m:
-            next_state_queue.append(get_screen())
-        else:
-            state_queue.append(next_state_queue[0])
-            next_state_queue.append(get_screen())
-
+    for _ in range(skip_steps):
+        state_queue.append(get_screen())
         action = env.action_space.sample()
         _, _, done, _ = env.step(action)
         if done:
@@ -216,6 +208,7 @@ def random_start(skip_steps=30, m=4):
 num_episodes = 10000
 m = 4
 for i_episode in range(num_episodes):
+    print('episode:', i_episode)
     # Initialize the environment and state
     done, state_queue, next_state_queue = random_start()
     if done:
@@ -249,8 +242,8 @@ for i_episode in range(num_episodes):
         optimize_model()
 
         if done:
-            episode_durations.append(t + 1)
-            plot_durations()
+            # episode_durations.append(t + 1)
+            # plot_durations()
             break
 
     # Update the target network, copying all weights and biases in DQN

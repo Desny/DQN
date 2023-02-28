@@ -73,7 +73,7 @@ init_screen = get_screen()
 _, _, screen_height, screen_width = init_screen.shape
 n_actions = env.action_space.n
 policy_net = DQN(screen_height, screen_width, n_actions).to(device)
-policy_net.load_state_dict(torch.load('weights/policy_net_weights.pth', map_location=torch.device('cpu')))
+policy_net.load_state_dict(torch.load('weights/policy_net_weights_100.pth', map_location=torch.device('cpu')))
 # policy_net.load_state_dict(torch.load('weights/policy_net_weights.pth'))
 policy_net.eval()
 

@@ -46,7 +46,7 @@ def get_args():
     parser.add_argument('--num_action_repeats', default=4, type=int)
     parser.add_argument('--num_stacked_frames', default=4, type=int)
     parser.add_argument('--learn_period', default=16, type=int, help='time interval for updating an agent')
-    parser.add_argument('--mode', default='train', type=str)
+    parser.add_argument('--mode', default='eval', type=str)
     args = parser.parse_args()
     return args
 
