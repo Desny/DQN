@@ -19,7 +19,6 @@ from torchvision.transforms import InterpolationMode
 
 env = gym.make('SpaceInvaders-v0').unwrapped
 
-
 # if gpu is to be used
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -70,9 +69,9 @@ class DQN(nn.Module):
 
     def forward(self, x):
         x = x.to(device)
-        x = F.relu(self.bn1(self.conv1(x)))
-        x = F.relu(self.bn2(self.conv2(x)))
-        x = F.relu(self.bn3(self.conv3(x)))
+        x = self.bn1(self.conv1(x))
+        x = self.bn2(self.conv2(x))
+        x = self.bn3(self.conv3(x))
         x = F.relu(self.l1(x.view(x.size(0), -1)))
         return self.l2(x.view(-1, 512))
 
@@ -103,8 +102,8 @@ BATCH_SIZE = 32
 GAMMA = 0.99
 EPS_START = 1.0
 EPS_END = 0.1
-EPS_DECAY = 10000
-TARGET_UPDATE = 100
+EPS_DECAY = 300000
+TARGET_UPDATE = 2400
 
 
 init_screen = get_screen()
@@ -118,7 +117,7 @@ target_net = DQN(screen_height, screen_width, n_actions).to(device)
 target_net.load_state_dict(policy_net.state_dict())
 target_net.eval()
 
-optimizer = optim.RMSprop(policy_net.parameters())
+optimizer = optim.SGD(policy_net.parameters(), lr=0.00025)
 memory = ReplayMemory(100000)
 
 steps_done = 0
@@ -192,14 +191,17 @@ def optimize_model():
 def random_start(skip_steps=30, m=4):
     env.reset()
     state_queue = deque([], maxlen=m)
-    next_state_queue = deque([], maxlen=m)
+    stack_state = deque([], maxlen=m)
     for _ in range(skip_steps):
-        state_queue.append(get_screen())
-        action = env.action_space.sample()
-        _, _, done, _ = env.step(action)
-        if done:
-            break
-    return done, state_queue, next_state_queue
+        for _ in range(m):
+            stack_state.append(get_screen())
+            action = env.action_space.sample()
+            _, _, done, _ = env.step(action)
+            if done:
+                break
+        state_queue.append(torch.maximum(stack_state[2], stack_state[3]))
+
+    return done, state_queue, stack_state
 
 
 ######################################################################
@@ -209,31 +211,34 @@ num_episodes = 10000
 m = 4
 for i_episode in range(num_episodes):
     print('episode:', i_episode)
+    print('steps_done:', steps_done)
+    eps_t = EPS_END + (EPS_START - EPS_END) * math.exp(-1. * steps_done / EPS_DECAY)
+    print('eps_threshold:', eps_t)
     # Initialize the environment and state
-    done, state_queue, next_state_queue = random_start()
+    done, state_queue, stack_state = random_start()
     if done:
         continue
 
     state = torch.cat(tuple(state_queue), dim=1)
+    next_state_queue = state_queue.copy()
     for t in count():
         reward = 0
         m_reward = 0
-        # 每m帧完成一次action
         action = select_action(state)
 
-        for i in range(m):
+        for _ in range(m):
             _, reward, done, _ = env.step(action.item())
-            if not done:
-                next_state_queue.append(get_screen())
-            else:
-                break
+            stack_state.append(get_screen())
             m_reward += reward
+            if done:
+                break
+        next_state_queue.append(torch.maximum(stack_state[2], stack_state[3]))
 
         if not done:
             next_state = torch.cat(tuple(next_state_queue), dim=1)
         else:
             next_state = None
-            m_reward = -150
+            m_reward = -50
         m_reward = torch.tensor([m_reward], device=device)
 
         memory.push(state, action, next_state, m_reward)
@@ -242,14 +247,16 @@ for i_episode in range(num_episodes):
         optimize_model()
 
         if done:
+            # 默认不画图，如需画图，取消注释即可
             # episode_durations.append(t + 1)
             # plot_durations()
             break
 
-    # Update the target network, copying all weights and biases in DQN
-    if i_episode % TARGET_UPDATE == 0:
-        target_net.load_state_dict(policy_net.state_dict())
-        torch.save(policy_net.state_dict(), 'weights/policy_net_weights_{0}.pth'.format(i_episode))
+        # Update the target network, copying all weights and biases in DQN
+        if steps_done % TARGET_UPDATE == 0:
+            target_net.load_state_dict(policy_net.state_dict())
+            torch.save(policy_net.state_dict(), 'weights/policy_net_weights_{0}.pth'.format(i_episode))
+            print('save torch: policy_net_weights_{0}.pth'.format(i_episode))
 
 
 print('Complete')

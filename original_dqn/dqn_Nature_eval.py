@@ -42,9 +42,9 @@ class DQN(nn.Module):
 
     def forward(self, x):
         x = x.to(device)
-        x = F.relu(self.bn1(self.conv1(x)))
-        x = F.relu(self.bn2(self.conv2(x)))
-        x = F.relu(self.bn3(self.conv3(x)))
+        x = self.bn1(self.conv1(x))
+        x = self.bn2(self.conv2(x))
+        x = self.bn3(self.conv3(x))
         x = F.relu(self.l1(x.view(x.size(0), -1)))
         return self.l2(x.view(-1, 512))
 
@@ -73,8 +73,7 @@ init_screen = get_screen()
 _, _, screen_height, screen_width = init_screen.shape
 n_actions = env.action_space.n
 policy_net = DQN(screen_height, screen_width, n_actions).to(device)
-policy_net.load_state_dict(torch.load('weights/policy_net_weights_100.pth', map_location=torch.device('cpu')))
-# policy_net.load_state_dict(torch.load('weights/policy_net_weights.pth'))
+policy_net.load_state_dict(torch.load('weights/policy_net_weights_3068.pth', map_location=torch.device(device)))
 policy_net.eval()
 
 env.reset()
@@ -91,21 +90,23 @@ total_reward = 0
 rewards = []
 duration = 0
 state = torch.cat(tuple(state_queue), dim=1)
+stack_state = deque([], maxlen=m)
+
 for t in count():
     reward = 0
     done = False
     # 每m帧完成一次action
-    with torch.no_grad():
-        action = policy_net(state).max(1)[1].view(1, 1)
-        print('action =', action.item(), 'action_values =', policy_net(state))
-
-    _, reward, done, _ = env.step(action.item())
-    total_reward += reward
-    if reward != 0:
-        rewards.append(reward)
+    action = policy_net(state).max(1)[1].view(1, 1)
+    print('action =', action.item(), 'action_values =', policy_net(state))
+    for _ in range(m):
+        _, reward, done, _ = env.step(action.item())
+        stack_state.append(get_screen())
+        total_reward += reward
+        if done:
+            break
     env.render()
     if not done:
-        state_queue.append(get_screen())
+        state_queue.append(torch.maximum(stack_state[2], stack_state[3]))
         state = torch.cat(tuple(state_queue), dim=1)
     else:
         duration = t + 1
@@ -113,7 +114,5 @@ for t in count():
 
     time.sleep(0.05)
 
-
 print('Complete, total reward = {0}  duration = {1}'.format(total_reward, duration))
-print('rewards =', rewards)
 env.close()
